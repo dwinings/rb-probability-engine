@@ -1,1 +1,1 @@
-require 'native'
+require 'probability-engine/native'
