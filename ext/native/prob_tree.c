@@ -11,6 +11,7 @@ typedef struct prob_tree {
   pnode_t* ply_a;
   pnode_t* ply_b;
   long goal;
+  long cardinality;
   // Hash
   int current_prob_dist;
   int counter;
@@ -32,6 +33,7 @@ static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash);
 
 static void ptree_free(VALUE self);
 static void ptree_init_goal(VALUE self, VALUE goal_hash);
+static void ptree_init_cardinality(VALUE self, VALUE goal_hash);
 // static void ptree_create_or_reuse_node(pnode_t* pnode);
 // static void ptree_gen_children(VALUE self, pnode_t* parent);
 // static void ptree_victorious_nodes(VALUE self);
@@ -52,8 +54,34 @@ static VALUE ptree_alloc(VALUE klass) {
 }
 static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash) {
   ptree_init_goal(self, goal_hash);
+  ptree_init_cardinality(self, goal_hash);
   return self;
 
+}
+
+static void ptree_init_cardinality(VALUE self, VALUE goal_hash) {
+  int i, tmp;
+  long values_len;
+  VALUE value_set;
+  VALUE* values_arr;
+  ptree_t* ptree;
+
+  Data_Get_Struct(self, ptree_t, ptree);
+  value_set = rb_funcall(goal_hash, rb_intern("values"), 0);
+  values_len = RARRAY_LEN(value_set);
+  values_arr = RARRAY_PTR(value_set);
+  tmp = 1;
+  for (i=0; i < values_len; i++) {
+    tmp *= FIX2INT(values_arr[i]) + 1;
+  }
+  ptree->cardinality = tmp;
+  return;
+}
+
+static VALUE ptree_cardinality(VALUE self) {
+  ptree_t* ptree;
+  Data_Get_Struct(self, ptree_t, ptree);
+  return LONG2FIX(ptree->cardinality);
 }
 
 static void ptree_init_goal(VALUE self, VALUE goal_hash) {
@@ -72,7 +100,6 @@ static void ptree_init_goal(VALUE self, VALUE goal_hash) {
   rb_iv_set(self, "@type_lookup", type_lookup);
   return;
 }
-
 
 static VALUE ptree_goal(VALUE self) {
   ptree_t* ptree;
@@ -95,6 +122,7 @@ void Init_native() {
   rb_define_alloc_func(cPTree, ptree_alloc);
   rb_define_method(cPTree, "initialize", ptree_init, 2);
   rb_define_method(cPTree, "goal", ptree_goal, 0);
+  rb_define_method(cPTree, "cardinality", ptree_cardinality, 0);
   //                                    r  w
   rb_define_attr(cPTree, "type_lookup", 1, 0);
 }
