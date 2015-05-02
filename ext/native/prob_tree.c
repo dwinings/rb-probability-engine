@@ -4,18 +4,17 @@
 #define SYM(STR) (ID2SYM(rb_intern(STR)))
 
 typedef struct prob_node {
-  long successes;
+  long long successes;
   double probspace;
   int attempts;
 } pnode_t;
 
 typedef struct prob_tree {
-  pnode_t* ply_a;
-  pnode_t* ply_b;
-  pnode_t* current_ply;
-  long current_ply_len;
+  pnode_t** ply_a;
+  pnode_t** ply_b;
+  pnode_t** current_ply;
   long goal;
-  long cardinality;
+  long long cardinality;
   int current_prob_dist;
   int depth;
 } ptree_t;
@@ -26,6 +25,7 @@ typedef struct prob_tree {
 static VALUE ptree_alloc(VALUE klass);
 static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash);
 static VALUE ptree_cardinality(VALUE self); // Useful for building our ply arrays...
+static VALUE ptree_success_prob(VALUE self);
 // static VALUE ptree_num_nodes(VALUE self);
 // static VALUE ptree_discarded_nodes(VALUE self);
 // static VALUE ptree_run_once(VALUE self);
@@ -39,14 +39,13 @@ static void ptree_init_goal(VALUE self, VALUE goal_hash);
 static void ptree_init_cardinality(VALUE self, VALUE goal_hash);
 static void ptree_init_plies(VALUE self);
 static void ptree_swap_plies(VALUE self);
-static pnode_t* pnode_create(double probspace, long successes);
+static pnode_t* pnode_create(double probspace, long long successes);
 static void pnode_init(pnode_t* self);
-static void pnode_set(pnode_t* self, double probspace, long successes);
-static int ptree_ply_location_for_node(VALUE self, pnode_t* node);
+static void pnode_set(pnode_t* self, double probspace, long long successes);
+static int ptree_ply_location_for_successes(VALUE self, long long successes);
 // static void ptree_create_or_reuse_node(pnode_t* pnode);
 // static void ptree_gen_children(VALUE self, pnode_t* parent);
 // static void ptree_victorious_nodes(VALUE self);
-// static void ptree_victorious_prob(VALUE self);
 // static void pnode_met_goal(pnode_t node, long goal);
 // static void ptree_incr_dist(VALUE self);
 
@@ -73,7 +72,7 @@ static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash) {
   ptree_init_plies(self);
 
   pnode_t* foo = pnode_create(1.0, 0x0303); 
-  printf("Node Location in Ply: %d\n", ptree_ply_location_for_node(self, foo));
+  printf("Node Location in Ply: %d\n", ptree_ply_location_for_successes(self, foo->successes));
   return self;
 }
 
@@ -97,7 +96,7 @@ static void ptree_init_cardinality(VALUE self, VALUE goal_hash) {
   return;
 }
 
-static int ptree_ply_location_for_node(VALUE self, pnode_t* node) {
+static int ptree_ply_location_for_successes(VALUE self, long long successes) {
   VALUE goal_hash, type_lookup, type_lookup_keys;
   VALUE* c_type_lookup_keys;
   int node_location = 0;
@@ -110,30 +109,22 @@ static int ptree_ply_location_for_node(VALUE self, pnode_t* node) {
   c_type_lookup_keys = RARRAY_PTR(type_lookup_keys);
   for(int i=0; i < RARRAY_LEN(type_lookup_keys); i++) {
     int index = FIX2INT(rb_hash_aref(type_lookup, c_type_lookup_keys[i]))*8;
-    int current_success = ((node->successes) >> index) & 0xFF; 
+    int current_success = ((successes) >> index) & 0xFF; 
     node_location+=current_success*goal_multiplier;
 
     goal_multiplier *= FIX2INT(rb_hash_aref(goal_hash, c_type_lookup_keys[i]))+1;
-  }  
+  }
   return node_location;
 }
 
 static VALUE pnode2rbstr(pnode_t* pnode) {
   char* out = malloc(sizeof(char)*255);
-  sprintf(out, "<PNode: @probspace=%f, @successes=%ld>", pnode->probspace, pnode->successes);
+  sprintf(out, "<PNode: @probspace=%f, @successes=%lld>", pnode->probspace, pnode->successes);
   return rb_str_new2(out);
 }
 
 static VALUE ptree_current_ply(VALUE self) {
-  ptree_t* ptree;
-  int i;
-  VALUE return_ary;
-  Data_Get_Struct(self, ptree_t, ptree);
-  return_ary = rb_ary_new();
-  for (i = 0; i < ptree->current_ply_len; i++) {
-    rb_ary_push(return_ary, pnode2rbstr(ptree->current_ply + i));
-  }
-  return return_ary;
+  return rb_cObject;
 }
 
 
@@ -166,11 +157,9 @@ static void ptree_init_goal(VALUE self, VALUE goal_hash) {
 static void ptree_init_plies(VALUE self) {
   ptree_t* ptree;
   Data_Get_Struct(self, ptree_t, ptree);
-  ptree->ply_a = (pnode_t*)malloc(sizeof(pnode_t)*ptree->cardinality);
-  ptree->ply_b = (pnode_t*)malloc(sizeof(pnode_t)*ptree->cardinality);
-  pnode_init(ptree->ply_a);
+  ptree->ply_a = (pnode_t**)calloc(ptree->cardinality, sizeof(pnode_t));
+  ptree->ply_b = (pnode_t**)calloc(ptree->cardinality, sizeof(pnode_t));
   ptree->current_ply = ptree->ply_a;
-  ptree->current_ply_len = 1;
 }
 
 static void ptree_swap_plies(VALUE self) {
@@ -195,7 +184,7 @@ static VALUE ptree_goal(VALUE self) {
   return INT2FIX(ptree->goal);
 }
 
-static pnode_t* pnode_create(double probspace, long successes) {
+static pnode_t* pnode_create(double probspace, long long successes) {
   pnode_t* pnode = (pnode_t*)malloc(sizeof(pnode_t));
   pnode->probspace = probspace;
   pnode->successes = successes;
@@ -208,7 +197,7 @@ static void pnode_init(pnode_t* self) {
   return;
 }
 
-static void pnode_set(pnode_t* self, double probspace, long successes) {
+static void pnode_set(pnode_t* self, double probspace, long long successes) {
   self->probspace = probspace;
   self->successes = successes;
   return;
@@ -221,6 +210,18 @@ static void ptree_free(ptree_t* ptree) {
   return;
 }
 
+static VALUE ptree_success_prob(VALUE self) {
+  ptree_t* ptree;
+  Data_Get_Struct(self, ptree_t, ptree);
+
+  int goal_location = ptree_ply_location_for_successes(self, ptree->goal);
+  if ((ptree->current_ply)[goal_location] == 0) {
+    return rb_float_new(0.0f);
+  } else {
+    return rb_float_new(((ptree->current_ply)[goal_location])->probspace);
+  }
+}
+
 void Init_native() {
   VALUE cPTree = rb_define_class("ProbTree", rb_cObject);
   //                         Class  rb-name   C-func #-args
@@ -229,6 +230,7 @@ void Init_native() {
   rb_define_method(cPTree, "goal", ptree_goal, 0);
   rb_define_method(cPTree, "cardinality", ptree_cardinality, 0);
   rb_define_method(cPTree, "current_ply", ptree_current_ply, 0);
+  rb_define_method(cPTree, "success_prob", ptree_success_prob, 0);
   //                                    r  w
   rb_define_attr(cPTree, "prob_dists", 1, 0);
   rb_define_attr(cPTree, "type_lookup", 1, 0);
