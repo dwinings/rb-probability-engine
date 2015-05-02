@@ -42,6 +42,7 @@ static void ptree_swap_plies(VALUE self);
 static pnode_t* pnode_create(double probspace, long successes);
 static void pnode_init(pnode_t* self);
 static void pnode_set(pnode_t* self, double probspace, long successes);
+static int ptree_ply_location_for_node(VALUE self, pnode_t* node);
 // static void ptree_create_or_reuse_node(pnode_t* pnode);
 // static void ptree_gen_children(VALUE self, pnode_t* parent);
 // static void ptree_victorious_nodes(VALUE self);
@@ -61,7 +62,7 @@ static VALUE ptree_alloc(VALUE klass) {
   return Data_Wrap_Struct(klass, 0, ptree_free, ptree);
 }
 static VALUE to_a(VALUE thing) {
-  rb_funcall(thing, rb_intern("to_a"), 0);
+  return rb_funcall(thing, rb_intern("to_a"), 0);
 }
 static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash) {
   // prob_dists.map(&:to_a)
@@ -70,8 +71,10 @@ static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash) {
   ptree_init_goal(self, goal_hash);
   ptree_init_cardinality(self, goal_hash);
   ptree_init_plies(self);
-  return self;
 
+  pnode_t* foo = pnode_create(1.0, 0x0303); 
+  printf("Node Location in Ply: %d\n", ptree_ply_location_for_node(self, foo));
+  return self;
 }
 
 
@@ -92,6 +95,27 @@ static void ptree_init_cardinality(VALUE self, VALUE goal_hash) {
   }
   ptree->cardinality = tmp;
   return;
+}
+
+static int ptree_ply_location_for_node(VALUE self, pnode_t* node) {
+  VALUE goal_hash, type_lookup, type_lookup_keys;
+  VALUE* c_type_lookup_keys;
+  int node_location = 0;
+  int goal_multiplier = 1;
+
+  type_lookup = rb_iv_get(self, "@type_lookup");
+  goal_hash = rb_iv_get(self, "@type_len_lookup");
+
+  type_lookup_keys = rb_funcall(goal_hash, rb_intern("keys"), 0);
+  c_type_lookup_keys = RARRAY_PTR(type_lookup_keys);
+  for(int i=0; i < RARRAY_LEN(type_lookup_keys); i++) {
+    int index = FIX2INT(rb_hash_aref(type_lookup, c_type_lookup_keys[i]))*8;
+    int current_success = ((node->successes) >> index) & 0xFF; 
+    node_location+=current_success*goal_multiplier;
+
+    goal_multiplier *= FIX2INT(rb_hash_aref(goal_hash, c_type_lookup_keys[i]))+1;
+  }  
+  return node_location;
 }
 
 static VALUE pnode2rbstr(pnode_t* pnode) {
