@@ -1,5 +1,6 @@
 #include <ruby.h>
 
+#define MAX_CARDINALITY 100000
 #define PUTS(OBJ) (rb_funcall(rb_cObject, rb_intern("puts"), 1, OBJ))
 #define SYM(STR) (ID2SYM(rb_intern(STR)))
 
@@ -40,6 +41,7 @@ static void ptree_init_cardinality(VALUE self, VALUE goal_hash);
 static void ptree_init_plies(VALUE self);
 static void ptree_swap_plies(VALUE self);
 static pnode_t* pnode_create(double probspace, long long successes);
+static pnode_t** pnode_ply_create(long long cardinality);
 static void pnode_init(pnode_t* self);
 static void pnode_set(pnode_t* self, double probspace, long long successes);
 static int ptree_ply_location_for_successes(VALUE self, long long successes);
@@ -157,8 +159,10 @@ static void ptree_init_goal(VALUE self, VALUE goal_hash) {
 static void ptree_init_plies(VALUE self) {
   ptree_t* ptree;
   Data_Get_Struct(self, ptree_t, ptree);
-  ptree->ply_a = (pnode_t**)calloc(ptree->cardinality, sizeof(pnode_t));
-  ptree->ply_b = (pnode_t**)calloc(ptree->cardinality, sizeof(pnode_t));
+
+  //Ply create uses calloc so mem is 0
+  ptree->ply_a = pnode_ply_create(ptree->cardinality);
+  ptree->ply_b = pnode_ply_create(ptree->cardinality);
   ptree->current_ply = ptree->ply_a;
 }
 
@@ -182,6 +186,17 @@ static VALUE ptree_goal(VALUE self) {
   ptree_t* ptree;
   Data_Get_Struct(self, ptree_t, ptree);
   return INT2FIX(ptree->goal);
+}
+
+static pnode_t** pnode_ply_create(long long cardinality) {
+  pnode_t** ply;
+  if(cardinality > MAX_CARDINALITY) {
+    printf("Tree too large!");
+    return 0x0;
+  } else {
+    ply = (pnode_t**)calloc(cardinality, sizeof(pnode_t));
+  }
+  return ply;
 }
 
 static pnode_t* pnode_create(double probspace, long long successes) {
