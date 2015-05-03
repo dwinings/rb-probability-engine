@@ -5,11 +5,10 @@ p = ProbTree.new([
                    c: {reward: 1, prob: 0.01},
                    failure: {prob: 0.39}
                   }
-                 ], {a: 3, b: 6, c: 4})
+                 ], {a: 3, b: 6, c: 1})
 
 p.prob_dists.each {|e| puts e.inspect}
-puts p.type_lookup
-puts p.type_len_lookup
-puts p.goal
-puts p.cardinality
-puts p.current_ply
+(1..100).each do
+  p.next_ply
+end
+puts p.success_prob

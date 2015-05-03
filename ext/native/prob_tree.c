@@ -280,7 +280,6 @@ static void write_to_destination_ply(VALUE self, pnode_t** destination_ply, long
   } else { // We are merging the probabilities of these two nodes; 
     pnode_set(destination_ply[destination_index], (destination_node->probspace + probspace), successes, attempts);
   }
-  printf("Successes: %lld, dest: %d\n", successes, destination_index);
 }
 
 static VALUE ptree_next_ply(VALUE self) {
