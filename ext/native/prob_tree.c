@@ -279,11 +279,6 @@ static void ptree_gen_children(VALUE self, pnode_t* node, VALUE prob_dist, pnode
     } 
 
     new_probspace = node->probspace * NUM2DBL(prob);
-    if(new_successes == ptree->goal) {
-      printf("new goal prob node: %0.20f\n", new_probspace);  
-    }
-
-
     write_to_destination_ply(self, destination_ply, new_successes, new_probspace, node->attempts+1);
   }
 }
