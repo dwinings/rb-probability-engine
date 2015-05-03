@@ -1,54 +1,4 @@
-#include <ruby.h>
-
-#define MAX_CARDINALITY 100000
-#define PUTS(OBJ) (rb_funcall(rb_cObject, rb_intern("puts"), 1, OBJ))
-#define SYM(STR) (ID2SYM(rb_intern(STR)))
-
-typedef struct prob_node {
-  long long successes;
-  double probspace;
-  int attempts;
-} pnode_t;
-
-typedef struct prob_tree {
-  pnode_t** current_ply;
-  pnode_t** next_ply;
-  long long goal;
-  long long cardinality;
-  int current_prob_dist;
-  int depth;
-} ptree_t;
-
-
-// Ruby-Accessible API
-static VALUE ptree_alloc(VALUE klass);
-static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash);
-static VALUE ptree_cardinality(VALUE self); // Useful for building our ply arrays...
-static VALUE ptree_success_prob(VALUE self);
-// static VALUE ptree_run_once(VALUE self);
-// static VALUE ptree_run(VALUE self, VALUE iters);
-static VALUE ptree_next_ply(VALUE self);
-static VALUE ptree_next_prob_dist(VALUE self);
-static VALUE pnode2rbstr(pnode_t* node);
-static VALUE ptree_run_once(VALUE self);
-
-// Hidden C internal stuff
-
-static void ptree_free(ptree_t* self);
-static void ptree_init_goal(VALUE self, VALUE goal_hash);
-static void ptree_init_cardinality(VALUE self, VALUE goal_hash);
-static void ptree_init_plies(VALUE self);
-static void ptree_swap_plies(VALUE self);
-static pnode_t* pnode_create(double probspace, long long successes, int attempts);
-static pnode_t** pnode_ply_create(long long cardinality);
-static void pnode_init(pnode_t* self);
-static void pnode_set(pnode_t* self, double probspace, long long successes, int attempts);
-static int ptree_ply_location_for_successes(VALUE self, long long successes);
-static void ptree_gen_children(VALUE self, pnode_t* parent, VALUE prob_dist, pnode_t** destination_ply);
-static void write_to_destination_ply(VALUE self, pnode_t** destination_ply, long long successes, double probspace, int attempts);
-// static void ptree_incr_dist(VALUE self);
-
-////////////////////////////////////////////////////////////////////////////////
+#include "prob_tree.h"
 
 static VALUE ptree_alloc(VALUE klass) {
   ptree_t* ptree = (ptree_t*)malloc(sizeof(ptree_t));
@@ -59,12 +9,8 @@ static VALUE ptree_alloc(VALUE klass) {
   ptree->depth = 0;
   return Data_Wrap_Struct(klass, 0, ptree_free, ptree);
 }
-static VALUE to_a(VALUE thing) {
-  return rb_funcall(thing, rb_intern("to_a"), 0);
-}
+
 static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash) {
-  // prob_dists.map(&:to_a)
-  //prob_dists = rb_block_call(prob_dists, rb_intern("map"), 0, NULL, to_a, Qtrue);
   rb_iv_set(self, "@prob_dists", prob_dists);
   rb_iv_set(self, "@depth", INT2FIX(0));
   ptree_init_goal(self, goal_hash);
@@ -127,7 +73,6 @@ static VALUE pnode2rbstr(pnode_t* pnode) {
 static VALUE ptree_current_ply(VALUE self) {
   return rb_cObject;
 }
-
 
 static VALUE ptree_cardinality(VALUE self) {
   ptree_t* ptree;
@@ -305,7 +250,7 @@ static VALUE ptree_next_ply(VALUE self) {
   Data_Get_Struct(self, ptree_t, ptree);
   current_prob_dist = ptree_next_prob_dist(self);
 
-  for(int i=0; i<ptree_cardinality(self); i++) {
+  for(int i=0; i < ptree->cardinality; i++) {
     current_node = ptree->current_ply[i];
     if((current_node !=  0) && (current_node->attempts) >= FIX2INT(rb_iv_get(self, "@depth"))) {
       ptree_gen_children(self, current_node, current_prob_dist, ptree->next_ply);
@@ -314,7 +259,6 @@ static VALUE ptree_next_ply(VALUE self) {
   rb_iv_set(self, "@depth", FIX2INT(rb_iv_get(self, "@depth")) + 1);
   //Do dragons.
   ptree_swap_plies(self);
-  
   return Qnil;
 }
 
