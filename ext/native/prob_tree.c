@@ -21,7 +21,6 @@ typedef struct prob_tree {
 
 
 // Ruby-Accessible API
-
 static VALUE ptree_alloc(VALUE klass);
 static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash);
 static VALUE ptree_cardinality(VALUE self); // Useful for building our ply arrays...
@@ -31,6 +30,7 @@ static VALUE ptree_success_prob(VALUE self);
 static VALUE ptree_next_ply(VALUE self);
 static VALUE ptree_next_prob_dist(VALUE self);
 static VALUE pnode2rbstr(pnode_t* node);
+static VALUE ptree_run_once(VALUE self);
 
 // Hidden C internal stuff
 
@@ -102,7 +102,11 @@ static int ptree_ply_location_for_successes(VALUE self, long long successes) {
   type_lookup = rb_iv_get(self, "@type_lookup");
   goal_hash = rb_iv_get(self, "@type_len_lookup");
 
-  type_lookup_keys = rb_funcall(goal_hash, rb_intern("keys"), 0);
+  if ((type_lookup_keys = rb_iv_get(self, "@type_lookup_keys")) == Qnil) {
+    rb_iv_set(self, "@type_lookup_keys", rb_funcall(goal_hash, rb_intern("keys"), 0));
+    type_lookup_keys = rb_iv_get(self, "@type_lookup_keys");
+  }
+
   c_type_lookup_keys = RARRAY_PTR(type_lookup_keys);
   for(int i=0; i < RARRAY_LEN(type_lookup_keys); i++) {
     int index = FIX2INT(rb_hash_aref(type_lookup, c_type_lookup_keys[i]))*8;
@@ -166,11 +170,16 @@ static void ptree_swap_plies(VALUE self) {
   ptree_t* ptree;
   Data_Get_Struct(self, ptree_t, ptree);
 
-  //Here be dragons, yo
+  pnode_t** tmp;
+  tmp = ptree->current_ply;
+  ptree->current_ply = ptree->next_ply;
+  ptree->next_ply = tmp;
+  
+  /* Lol dicks.
   ptree -> current_ply =  (pnode_t**) ((long long) ptree -> current_ply ^ (long long) ptree->next_ply);
   ptree -> next_ply =  (pnode_t**) ((long long) ptree -> next_ply ^ (long long) ptree->current_ply);
   ptree -> current_ply =  (pnode_t**) ((long long) ptree -> current_ply ^ (long long) ptree->next_ply);
-
+*/
   return;
 }
 
@@ -241,6 +250,9 @@ static void ptree_gen_children(VALUE self, pnode_t* node, VALUE prob_dist, pnode
   VALUE* c_prob_dist_keys;
   ptree_t* ptree;
   long long new_successes;
+  long long goal_of_type;
+  long long successes_of_type;
+  long long reward_of_type;
   double new_probspace;
 
   Data_Get_Struct(self, ptree_t, ptree);
@@ -257,12 +269,21 @@ static void ptree_gen_children(VALUE self, pnode_t* node, VALUE prob_dist, pnode
     prob = rb_hash_aref(outcome, SYM("prob"));
     new_successes = node->successes;
     if(type_id != Qnil && 
-        ((ptree->goal >> (FIX2INT(type_id)*8)) & 0xFF) > ((node->successes >> FIX2INT(type_id)*8) & 0xFF)) {
-
-      new_successes = node->successes + (FIX2INT(reward) << (FIX2INT(type_id)*8));
+        ( goal_of_type = (ptree->goal >> (FIX2INT(type_id)*8)) & 0xFF ) > ( successes_of_type = ((node->successes >> (FIX2INT(type_id)*8)) & 0xFF) )){
+      reward_of_type = FIX2INT(reward);
+      if (successes_of_type + reward_of_type > goal_of_type) {
+        reward_of_type = goal_of_type - successes_of_type;
+      }
+      new_successes = node->successes + (reward_of_type << (FIX2INT(type_id)*8));
       new_successes = ptree->goal < new_successes ? ptree->goal : new_successes;
     } 
+
     new_probspace = node->probspace * NUM2DBL(prob);
+    if(new_successes == ptree->goal) {
+      printf("new goal prob node: %0.20f\n", new_probspace);  
+    }
+
+
     write_to_destination_ply(self, destination_ply, new_successes, new_probspace, node->attempts+1);
   }
 }
@@ -298,6 +319,7 @@ static VALUE ptree_next_ply(VALUE self) {
   rb_iv_set(self, "@depth", FIX2INT(rb_iv_get(self, "@depth")) + 1);
   //Do dragons.
   ptree_swap_plies(self);
+  
   return Qnil;
 }
 
@@ -312,7 +334,14 @@ static VALUE ptree_next_prob_dist(VALUE self) {
   }
 
   (ptree->current_prob_dist)++;
-  return rb_ary_entry(prob_dists, ptree->current_prob_dist-1);
+  return rb_ary_entry(prob_dists, (ptree->current_prob_dist)-1);
+}
+
+static VALUE ptree_run_once(VALUE self) {
+  for(int i=0; i<FIX2INT(rb_funcall(rb_iv_get(self, "@prob_dists"), rb_intern("count"), 0)); i++) {
+    ptree_next_ply(self);
+  }
+  return Qnil;
 }
 
 void Init_native() {
@@ -325,6 +354,7 @@ void Init_native() {
   rb_define_method(cPTree, "current_ply", ptree_current_ply, 0);
   rb_define_method(cPTree, "success_prob", ptree_success_prob, 0);
   rb_define_method(cPTree, "next_ply", ptree_next_ply, 0);
+  rb_define_method(cPTree, "run_once", ptree_run_once, 0);
   //                                    r  w
   rb_define_attr(cPTree, "prob_dists", 1, 0);
   rb_define_attr(cPTree, "type_lookup", 1, 0);
