@@ -16,8 +16,7 @@ p.prob_dists.each {|e| puts e.inspect}
 i = 0
 while(p.success_prob < 0.9) do
   p.run_once
-  puts p.success_prob
   i+=1;
 end
-puts i
+puts "Took #{i} iterations for a #{p.success_prob} rate"
 

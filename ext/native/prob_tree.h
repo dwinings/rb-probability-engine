@@ -8,12 +8,14 @@
 #define PUTS(OBJ) (rb_funcall(rb_cObject, rb_intern("puts"), 1, OBJ))
 #define SYM(STR) (ID2SYM(rb_intern(STR)))
 
+//A probability of a thing
 typedef struct prob_node {
   long long successes;
   double probspace;
   int attempts;
 } pnode_t;
 
+//A C representation the hashed valued for the probabilities
 typedef struct prob_dist_item_node_struct {
   int index;
   int reward;
@@ -26,6 +28,7 @@ typedef struct prob_dist_struct {
   prob_dist_item_node_t** probs;
 } prob_dist_t;
 
+//The tree!
 typedef struct prob_tree {
   pnode_t** current_ply;
   pnode_t** next_ply;
@@ -38,7 +41,8 @@ typedef struct prob_tree {
   prob_dist_t** prob_dists; 
 } ptree_t;
 
-//I guess I should just pass a reference to the tree?...-_-
+//This is a wrapper struct. It may be replaced by a reference to the whole tree.
+//TODO: See about passing a reference to the whole tree.
 typedef struct ptree_thread_wrapper_struct {
   prob_dist_t** prob_dist;
   pnode_t** ptree_current_ply;
@@ -61,7 +65,6 @@ static VALUE pnode2rbstr(pnode_t* node);
 static VALUE ptree_run_once(VALUE self);
 
 // Hidden C internal stuff
-
 static void ptree_free(ptree_t* self);
 static void ptree_init_goal(VALUE self, VALUE goal_hash);
 static void ptree_init_cardinality(VALUE self, VALUE goal_hash);
