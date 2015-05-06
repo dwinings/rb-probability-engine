@@ -1,6 +1,7 @@
 #ifndef PROB_TREE_H
 #define PROB_TREE_H
 
+#include <pthread.h>
 #include <ruby.h>
 
 #define MAX_CARDINALITY 100000
@@ -13,6 +14,18 @@ typedef struct prob_node {
   int attempts;
 } pnode_t;
 
+typedef struct prob_dist_item_node_struct {
+  int index;
+  int reward;
+  double prob;
+} prob_dist_item_node_t;
+
+//Node for a single probability distribution.
+typedef struct prob_dist_struct {
+  int num_prob;
+  prob_dist_item_node_t** probs;
+} prob_dist_t;
+
 typedef struct prob_tree {
   pnode_t** current_ply;
   pnode_t** next_ply;
@@ -20,7 +33,20 @@ typedef struct prob_tree {
   long long cardinality;
   int current_prob_dist;
   int depth;
+  
+  //Not sure if this belongs to the tree...
+  prob_dist_t** prob_dists; 
 } ptree_t;
+
+//I guess I should just pass a reference to the tree?...-_-
+typedef struct ptree_thread_wrapper_struct {
+  prob_dist_t** prob_dist;
+  pnode_t** ptree_current_ply;
+  pnode_t** result_ply; 
+  long long cardinality;
+  long long goal;
+  int test;
+} ptree_thread_wrapper;
 
 
 // Ruby-Accessible API
@@ -48,4 +74,14 @@ static void pnode_set(pnode_t* self, double probspace, long long successes, int 
 static int ptree_ply_location_for_successes(VALUE self, long long successes);
 static void ptree_gen_children(VALUE self, pnode_t* parent, VALUE prob_dist, pnode_t** destination_ply);
 static void write_to_destination_ply(VALUE self, pnode_t** destination_ply, long long successes, double probspace, int attempts);
+
+/*
+ * The multithreaded functions cannot/should not access the ruby API.
+ * The single threaded version accesses the api way more than it should honestly
+ * To combat this we will be data loading and passing everything we need into the different threads.
+ */
+//Defines for threaded functions
+//Function pointer, so we can pass this as reference into the threads.
+static void *ptree_threaded_next_ply(ptree_thread_wrapper** wrapper);
+static void ptree_init_prob_dists(VALUE self);
 #endif
