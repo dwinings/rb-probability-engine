@@ -101,16 +101,20 @@ static void ptree_init_prob_dists(VALUE self, VALUE prob_dists, VALUE goal_hash)
     rename_keys(prob_dist, key_to_index_hash);
     long inner_dist_len = RARRAY_LEN(rb_funcall(prob_dist, rb_intern("keys"), 0));
     VALUE* inner_dist = RARRAY_PTR(rb_funcall(prob_dist, rb_intern("keys"), 0));
-    for (long j = 0; j < inner_dist_len; j++) {
-      outcome_t* outcome = &(ptree->prob_dists)[(i*prob_dist_len)+j];
-      VALUE rb_outcome_hash = rb_hash_aref(prob_dist, inner_dist[j]);
-      outcome->item        = FIX2LONG(inner_dist[j]);
-      outcome->quantity    = FIX2LONG(rb_hash_aref(rb_outcome_hash, SYM("reward")));
-      outcome->probability = NUM2DBL(rb_hash_aref(rb_outcome_hash, SYM("prob")));
-      outcome->initialized = 1;
+    for (long j = 0; j < ptree->num_items; j++) {
+      outcome_t* outcome = &(ptree->prob_dists)[(i*ptree->num_items)+j];
+      VALUE rb_outcome_hash = rb_hash_aref(prob_dist, INT2FIX(j));
+      if (rb_outcome_hash != Qnil) {
+        outcome->item        = FIX2LONG(inner_dist[j]);
+        outcome->quantity    = FIX2LONG(rb_hash_aref(rb_outcome_hash, SYM("reward")));
+        outcome->probability = NUM2DBL(rb_hash_aref(rb_outcome_hash, SYM("prob")));
+        outcome->initialized = 1;
+      }
     }
   }
   printf("ptree->num_items: %lld\n", ptree->num_items);
+  print_all_outcomes(ptree);
+  printf("INITALIZATION COMPLETE\n");
 }
 
 void print_all_outcomes(ptree_t* ptree) {
@@ -133,8 +137,8 @@ static void print_outcome(outcome_t* outcome) {
 }
 
 static outcome_t* get_outcome(ptree_t* ptree, long prob_dist_num, long outcome_num) {
-  printf("From pdist #%ld, getting outcome #%ld\n", prob_dist_num, outcome_num);
-  return &((ptree->prob_dists)[((ptree->num_prob_dists)*prob_dist_num) + outcome_num]);
+  printf("From pdist #%ld, getting outcome #%ld (#%ld)\n", prob_dist_num, outcome_num, ((ptree->num_items)*prob_dist_num) + outcome_num);
+  return &((ptree->prob_dists)[((ptree->num_items)*prob_dist_num) + outcome_num]);
 }
 
 static void ptree_init_cardinality(VALUE self, VALUE goal_hash) {
@@ -153,20 +157,22 @@ static void ptree_init_cardinality(VALUE self, VALUE goal_hash) {
     tmp *= FIX2INT(values_arr[i]) + 1;
   }
   ptree->cardinality = tmp;
+  printf("ptree->cardinality: %lld\n", ptree->cardinality);
   return;
 }
 
-static int ptree_ply_location_for_successes(ptree_t* ptree, long long successes) {
-  int node_location = 0, goal_multiplier = 1;
+static long long ptree_ply_location_for_successes(ptree_t* ptree, long long successes) {
+  long long node_location = 0, goal_multiplier = 1;
 
   for(int i = 0, goal_idx = 0; i < ptree->num_items; i++) {
     if (ptree->item_nums[i] > 0) {
-      int current_success = (successes >> goal_idx) & 0xFF;
+      long long current_success = (successes >> (goal_idx*8)) & 0xFF;
       node_location+=current_success*goal_multiplier;
-      goal_multiplier *= ptree->item_nums[i]+1;
+      goal_multiplier *= ptree->item_nums[i];
       goal_idx++;
     }
   }
+  printf("Placing node with %lld successes into slot %lld\n", successes, node_location);
   return node_location;
 }
 
@@ -268,8 +274,8 @@ static void ptree_gen_children(ptree_t* ptree, pnode_t* node, int prob_dist_num,
   int i, goal_idx;
 
   for (i = 0, goal_idx = 0; i < ptree->num_items; i++) {
-    print_outcome(outcome);
     outcome = get_outcome(ptree, prob_dist_num, i);
+    print_outcome(outcome);
     if (outcome->initialized) {
       reward_of_type = outcome->quantity;
       reward_prob = outcome->probability;
@@ -291,7 +297,7 @@ static void ptree_gen_children(ptree_t* ptree, pnode_t* node, int prob_dist_num,
 }
 
 static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, long long successes, double probspace, int attempts) {
-  int destination_index = ptree_ply_location_for_successes(ptree, successes);
+  long long destination_index = ptree_ply_location_for_successes(ptree, successes);
   pnode_t* new_pnode;
   pnode_t* destination_node = destination_ply[destination_index];
 
@@ -303,7 +309,7 @@ static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, 
     printf("Overwriting stale node in ply with %lld successes and prob of %0.10f\n", successes, probspace*100);
     pnode_set(destination_ply[destination_index], probspace, successes, attempts);
   } else { // We are merging the probabilities of these two nodes;
-    printf("Merging identical nodes in ply with %0.10f successes and probs of %0.10f and %0.10f\n", successes, destination_node->probspace, probspace);
+    printf("Merging identical nodes in ply with %lld successes and probs of %0.10f and %0.10f\n", successes, destination_node->probspace, probspace);
     double new_prob = destination_node->probspace + probspace;
     pnode_set(destination_ply[destination_index], new_prob, successes, attempts);
   }

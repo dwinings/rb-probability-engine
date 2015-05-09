@@ -57,7 +57,7 @@ static pnode_t* pnode_create(double probspace, long long successes, int attempts
 static pnode_t** pnode_ply_create(long long cardinality);
 static void pnode_init(pnode_t* self);
 static void pnode_set(pnode_t* self, double probspace, long long successes, int attempts);
-static int ptree_ply_location_for_successes(ptree_t* ptree, long long successes);
+static long long ptree_ply_location_for_successes(ptree_t* ptree, long long successes);
 static void ptree_gen_children(ptree_t* ptree, pnode_t* parent, int prob_dist_num, pnode_t** destination_ply);
 static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, long long successes, double probspace, int attempts);
 static int ptree_next_prob_dist(ptree_t* ptree);
