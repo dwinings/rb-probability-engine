@@ -7,6 +7,15 @@
 #define PUTS(OBJ) (rb_funcall(rb_cObject, rb_intern("puts"), 1, OBJ))
 #define SYM(STR) (ID2SYM(rb_intern(STR)))
 
+// #define PROB_TREE_DEBUG
+#ifdef PROB_TREE_DEBUG
+#define DEBUG(...) (printf(__VA_ARGS__));
+#define PUTS_DEBUG(OBJ) (rb_funcall(rb_cObject, rb_intern("puts"), 1, OBJ))
+#else
+#define DEBUG(...)
+#define PUTS_DEBUG(OBJ)
+#endif
+
 typedef struct prob_node {
   long long successes;
   double probspace;
@@ -55,12 +64,11 @@ static void ptree_init_plies(VALUE self);
 static void ptree_swap_plies(ptree_t* ptree);
 static pnode_t* pnode_create(double probspace, long long successes, int attempts);
 static pnode_t** pnode_ply_create(long long cardinality);
-static void pnode_init(pnode_t* self);
 static void pnode_set(pnode_t* self, double probspace, long long successes, int attempts);
 static long long ptree_ply_location_for_successes(ptree_t* ptree, long long successes);
-static void ptree_gen_children(ptree_t* ptree, pnode_t* parent, int prob_dist_num, pnode_t** destination_ply);
+static void ptree_gen_children(ptree_t* ptree, pnode_t* parent, long prob_dist_num, pnode_t** destination_ply);
 static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, long long successes, double probspace, int attempts);
-static int ptree_next_prob_dist(ptree_t* ptree);
+static long ptree_next_prob_dist(ptree_t* ptree);
 static void print_outcome(outcome_t* outcome);
 static outcome_t* get_outcome(ptree_t* ptree, long prob_dist_num, long outcome_num);
 static void print_all_outcomes(ptree_t* ptree);
