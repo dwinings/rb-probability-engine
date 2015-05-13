@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.author = 'David Winings'
   spec.bindir = 'bin'
   # spec.executable = 'exec.rb'
-  spec.files = Dir['lib/**/*.rb'] + Dir['bin/*'] + Dir['ext/**/*.c'] + Dir['ext/**/extconf.rb']
+  spec.files = Dir['lib/**/*.rb'] + Dir['bin/*'] + Dir['ext/**/*.c'] + Dir['ext/**/*.h'] + Dir['ext/**/extconf.rb']
   spec.platform = Gem::Platform::RUBY # This is the default
   spec.require_paths = [ 'lib', 'ext' ]
   spec.extensions = Dir['ext/**/extconf.rb']

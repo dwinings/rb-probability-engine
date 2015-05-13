@@ -52,7 +52,6 @@ static VALUE ptree_cardinality(VALUE self); // Useful for building our ply array
 static VALUE ptree_success_prob(VALUE self);
 static VALUE ptree_run_once(VALUE self);
 static VALUE ptree_next_ply(VALUE self);
-static VALUE pnode2rbstr(pnode_t* node);
 static VALUE ptree_run_once(VALUE self);
 
 // Hidden C internal stuff
@@ -72,4 +71,5 @@ static long ptree_next_prob_dist(ptree_t* ptree);
 static void print_outcome(outcome_t* outcome);
 static outcome_t* get_outcome(ptree_t* ptree, long prob_dist_num, long outcome_num);
 static void print_all_outcomes(ptree_t* ptree);
+static void print_prob_dist(ptree_t* ptree, long prob_dist_num);
 #endif

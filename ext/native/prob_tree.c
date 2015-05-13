@@ -2,8 +2,6 @@
 
 static VALUE ptree_alloc(VALUE klass) {
   ptree_t* ptree = (ptree_t*)malloc(sizeof(ptree_t));
-  // TODO: Get cardinality and init plies.
-  // TODO: Init the goal
   ptree->goal = 0L;
   ptree->current_prob_dist = 0;
   ptree->depth = 0;
@@ -139,6 +137,13 @@ void print_all_outcomes(ptree_t* ptree) {
   }
 }
 
+static void print_prob_dist(ptree_t* ptree, long current_prob_dist) {
+  DEBUG("PROB_DIST: \n");
+  for (int i = 0; i < ptree->num_items; i++) {
+    print_outcome(&((ptree->prob_dists)[(current_prob_dist * ptree->num_items) + i]));
+  }
+}
+
 static void print_outcome(outcome_t* outcome) {
   if (outcome != NULL) {
     if (outcome->initialized != 0) {
@@ -188,12 +193,6 @@ static long long ptree_ply_location_for_successes(ptree_t* ptree, long long succ
   return node_location;
 }
 
-static VALUE pnode2rbstr(pnode_t* pnode) {
-  char* out = malloc(sizeof(char)*255);
-  sprintf(out, "<PNode: @probspace=%0.20f, @successes=%lld>", pnode->probspace, pnode->successes);
-  return rb_str_new2(out);
-}
-
 static VALUE ptree_current_ply(VALUE self) {
   return rb_cObject;
 }
@@ -216,9 +215,9 @@ static void ptree_init_plies(VALUE self) {
 }
 
 static void ptree_swap_plies(ptree_t* ptree) {
-  ptree -> current_ply =  (pnode_t**) ((long long) ptree -> current_ply ^ (long long) ptree->next_ply);
-  ptree -> next_ply =  (pnode_t**) ((long long) ptree -> next_ply ^ (long long) ptree->current_ply);
-  ptree -> current_ply =  (pnode_t**) ((long long) ptree -> current_ply ^ (long long) ptree->next_ply);
+  ptree -> current_ply =  (pnode_t**) ((long long) ptree->current_ply ^ (long long) ptree->next_ply);
+  ptree -> next_ply    =  (pnode_t**) ((long long) ptree->next_ply    ^ (long long) ptree->current_ply);
+  ptree -> current_ply =  (pnode_t**) ((long long) ptree->current_ply ^ (long long) ptree->next_ply);
   return;
 }
 
@@ -287,20 +286,20 @@ static void ptree_gen_children(ptree_t* ptree, pnode_t* node, long prob_dist_num
       reward_of_type = outcome->quantity;
       reward_prob = outcome->probability;
       new_successes = node->successes;
-      if(ptree->item_nums[i] > 0) {
-        if (
-            (goal_of_type = (ptree->goal >> (goal_idx*8)) & 0xFF ) >
-            (successes_of_type = ((node->successes >> (goal_idx*8)) & 0xFF))) {
-          if (successes_of_type + reward_of_type > goal_of_type) {
-            reward_of_type = goal_of_type - successes_of_type;
-          }
-          new_successes = node->successes + (reward_of_type << (goal_idx*8));
-          new_successes = ptree->goal < new_successes ? ptree->goal : new_successes;
+      if ( ptree->item_nums[i] > 0 &&
+          (goal_of_type = (ptree->goal >> (goal_idx*8)) & 0xFF ) >
+          (successes_of_type = ((node->successes >> (goal_idx*8)) & 0xFF))) {
+        if (successes_of_type + reward_of_type > goal_of_type) {
+          reward_of_type = goal_of_type - successes_of_type;
         }
-        goal_idx++;
+        new_successes = node->successes + (reward_of_type << (goal_idx*8));
+        new_successes = ptree->goal < new_successes ? ptree->goal : new_successes;
       }
       new_probspace = node->probspace * reward_prob;
       write_to_destination_ply(ptree, destination_ply, new_successes, new_probspace, node->attempts+1);
+    }
+    if(ptree->item_nums[i] > 0) {
+      goal_idx++;
     }
   }
 }
@@ -332,6 +331,7 @@ static VALUE ptree_next_ply(VALUE self) {
   current_prob_dist = ptree_next_prob_dist(ptree);
 
   DEBUG("===============================================\n");
+  print_prob_dist(ptree, current_prob_dist);
   for(int i=0; i < ptree->cardinality; i++) {
     current_node = ptree->current_ply[i];
     if((current_node !=  0) && (current_node->attempts) >= ptree->depth) {
