@@ -1,4 +1,5 @@
 #include "prob_tree.h"
+#include "prob_tree_helpers.c"
 
 static VALUE ptree_alloc(VALUE klass) {
   ptree_t* ptree = (ptree_t*)malloc(sizeof(ptree_t));
@@ -8,43 +9,7 @@ static VALUE ptree_alloc(VALUE klass) {
   return Data_Wrap_Struct(klass, 0, ptree_free, ptree);
 }
 
-static VALUE prob_dist_keys_block(VALUE yielded_dist, VALUE context, int argc, VALUE argv[]) {
-  return rb_funcall(yielded_dist, rb_intern("keys"), 0);
-}
-
 static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash) {
-  rb_iv_set(self, "@prob_dists", prob_dists);
-  rb_iv_set(self, "@depth", INT2FIX(0));
-  ptree_init_prob_dists(self, prob_dists, goal_hash);
-  ptree_init_cardinality(self, goal_hash);
-  ptree_init_plies(self);
-
-  return self;
-}
-
-VALUE hash_key_renamer_block(VALUE key, VALUE context_ary, int argc, VALUE argv[]) {
-  VALUE* context_c_ary = RARRAY_PTR(context_ary);
-  VALUE goal_hash = context_c_ary[0];
-  VALUE mapper_hash = context_c_ary[1];
-  // goal[mapper[key]] = goal.delete(key) if mapper[key]
-  if (rb_hash_aref(mapper_hash, key) != Qnil) {
-    rb_hash_aset(goal_hash, rb_hash_aref(mapper_hash, key), rb_funcall(goal_hash, rb_intern("delete"), 1, key));
-  }
-  return Qnil;
-}
-
-void rename_keys(VALUE goal_hash, VALUE mapper_hash) {
-  // Remap all the keys in the goal hash to use the numeric ones.
-  rb_block_call(
-                rb_funcall(goal_hash, rb_intern("keys"), 0),
-                rb_intern("each"),
-                0,
-                NULL,
-                RUBY_METHOD_FUNC(hash_key_renamer_block),
-                rb_ary_new3(2, goal_hash, mapper_hash));
-}
-
-static void ptree_init_prob_dists(VALUE self, VALUE prob_dists, VALUE goal_hash) {
   long item_idx, prob_dist_idx, num_items_desired, goal_idx, prob_dist_len;
   VALUE item_symbol_mapping, item_set, rb_num_items_desired, prob_dist, rb_outcome_hash;
   VALUE* prob_dists_ary;
@@ -52,6 +17,10 @@ static void ptree_init_prob_dists(VALUE self, VALUE prob_dists, VALUE goal_hash)
   outcome_t* outcome;
 
   Data_Get_Struct(self, ptree_t, ptree);
+
+  // In case ruby programmers forget what they called this thing with.
+  rb_iv_set(self, "@prob_dists", prob_dists);
+  rb_iv_set(self, "@goals", goal_hash);
 
   // Initialize item mapping
 
@@ -88,6 +57,13 @@ static void ptree_init_prob_dists(VALUE self, VALUE prob_dists, VALUE goal_hash)
     }
   }
 
+  // Initialize the cardinality (i.e. the max size of a ply)
+  ptree->cardinality = 1;
+  for (item_idx = 0; item_idx < ptree->num_items; item_idx++) {
+    // If it's 0 it'll just multiply by 1
+    ptree->cardinality *= ptree->goals_by_item[item_idx] + 1;
+  }
+
   DEBUG("PTree Goal initialized to %lld\n", ptree->goal);
 
   // Initialize the Probability Distribution
@@ -114,10 +90,18 @@ static void ptree_init_prob_dists(VALUE self, VALUE prob_dists, VALUE goal_hash)
   }
   DEBUG("ptree->num_items: %lld\n", ptree->num_items);
   print_all_outcomes(ptree);
+
+  ptree->current_ply = pnode_ply_create(ptree->cardinality);
+  ptree->next_ply = pnode_ply_create(ptree->cardinality);
+  write_to_destination_ply(ptree, ptree->current_ply, 0, 1.0f, 0);
+  ptree->depth = 0;
   DEBUG("INITALIZATION COMPLETE\n");
+
+  return self;
 }
 
-void initialize_outcome(outcome_t* outcome, long item, VALUE rb_outcome_hash) {
+// Initialize an outcome in the ptree struct from a ruby outcome hash's contents
+static void initialize_outcome(outcome_t* outcome, long item, VALUE rb_outcome_hash) {
   VALUE tmp;
 
   if (rb_outcome_hash != Qnil) {
@@ -140,103 +124,35 @@ void initialize_outcome(outcome_t* outcome, long item, VALUE rb_outcome_hash) {
   }
 }
 
-void print_all_outcomes(ptree_t* ptree) {
-  for (long i = 0; i < ptree->num_prob_dists; i++) {
-    DEBUG("New prob dist.\n");
-    for (long j = 0; j < ptree->num_items; j++) {
-      print_outcome(get_outcome(ptree, i, j));
-    }
-  }
-}
-
-static void print_prob_dist(ptree_t* ptree, long current_prob_dist) {
-  DEBUG("PROB_DIST: \n");
-  for (int i = 0; i < ptree->num_items; i++) {
-    print_outcome(&((ptree->prob_dists)[(current_prob_dist * ptree->num_items) + i]));
-  }
-}
-
-static void print_outcome(outcome_t* outcome) {
-  if (outcome != NULL) {
-    if (outcome->initialized != 0) {
-      DEBUG("<Outcome: @item=%ld, @qty=%ld, @prob=%0.10f%%\n", outcome->item, outcome->quantity, outcome->probability * 100);
-    } else {
-      DEBUG("<Outcome: NONE>\n");
-    }
-  }
-}
 
 static outcome_t* get_outcome(ptree_t* ptree, long prob_dist_num, long outcome_num) {
-  // DEBUG("From pdist #%ld, getting outcome #%ld (#%ld)\n", prob_dist_num, outcome_num, ((ptree->num_items)*prob_dist_num) + outcome_num);
-  return &((ptree->prob_dists)[((ptree->num_items)*prob_dist_num) + outcome_num]);
-}
-
-static void ptree_init_cardinality(VALUE self, VALUE goal_hash) {
-  int i, tmp;
-  long values_len;
-  VALUE value_set;
-  VALUE* values_arr;
-  ptree_t* ptree;
-
-  Data_Get_Struct(self, ptree_t, ptree);
-  value_set = rb_funcall(goal_hash, rb_intern("values"), 0);
-  values_len = RARRAY_LEN(value_set);
-  values_arr = RARRAY_PTR(value_set);
-  tmp = 1;
-  for (i=0; i < values_len; i++) {
-    tmp *= FIX2INT(values_arr[i]) + 1;
-  }
-  ptree->cardinality = tmp;
-  DEBUG("ptree->cardinality: %lld\n", ptree->cardinality);
-  return;
+  return &((ptree->prob_dists)[(ptree->num_items * prob_dist_num) + outcome_num]);
 }
 
 static long long ptree_ply_location_for_successes(ptree_t* ptree, long long successes) {
-  long long node_location = 0, goal_multiplier = 1;
+  long long node_location, goal_multiplier, current_success;
+  long item_idx, goal_idx;
 
-  for(int i = 0, goal_idx = 0; i < ptree->num_items; i++) {
-    if (ptree->goals_by_item[i] > 0) {
-      long long current_success = (successes >> (goal_idx*8)) & 0xFF;
+  node_location = 0;
+  goal_multiplier = 1;
+
+  for(item_idx = 0, goal_idx = 0; item_idx < ptree->num_items; item_idx++) {
+    if (ptree->goals_by_item[item_idx] > 0) {
+      current_success = (successes >> (goal_idx*8)) & 0xFF;
       node_location += current_success * goal_multiplier;
-      goal_multiplier *= ptree->goals_by_item[i] + 1;
+      goal_multiplier *= ptree->goals_by_item[item_idx] + 1;
       goal_idx++;
     }
   }
   return node_location;
 }
 
-static VALUE ptree_current_ply(VALUE self) {
-  return rb_cObject;
-}
-
-static VALUE ptree_cardinality(VALUE self) {
-  ptree_t* ptree;
-  Data_Get_Struct(self, ptree_t, ptree);
-  return LONG2FIX(ptree->cardinality);
-}
-
-static void ptree_init_plies(VALUE self) {
-  ptree_t* ptree;
-  Data_Get_Struct(self, ptree_t, ptree);
-
-  //Ply create uses calloc so mem is 0
-  ptree->current_ply = pnode_ply_create(ptree->cardinality);
-  ptree->next_ply = pnode_ply_create(ptree->cardinality);
-
-  write_to_destination_ply(ptree, ptree->current_ply, 0, 1.0f, 0);
-}
-
 static void ptree_swap_plies(ptree_t* ptree) {
+  // Standard XOR swapping algorithm.
   ptree -> current_ply =  (pnode_t**) ((long long) ptree->current_ply ^ (long long) ptree->next_ply);
   ptree -> next_ply    =  (pnode_t**) ((long long) ptree->next_ply    ^ (long long) ptree->current_ply);
   ptree -> current_ply =  (pnode_t**) ((long long) ptree->current_ply ^ (long long) ptree->next_ply);
   return;
-}
-
-static VALUE ptree_goal(VALUE self) {
-  ptree_t* ptree;
-  Data_Get_Struct(self, ptree_t, ptree);
-  return INT2FIX(ptree->goal);
 }
 
 static pnode_t** pnode_ply_create(long long cardinality) {
@@ -250,21 +166,7 @@ static pnode_t** pnode_ply_create(long long cardinality) {
   return ply;
 }
 
-static pnode_t* pnode_create(double probspace, long long successes, int attempts) {
-  pnode_t* pnode = (pnode_t*)malloc(sizeof(pnode_t));
-  pnode->probspace = probspace;
-  pnode->successes = successes;
-  pnode->attempts = attempts;
-  return pnode;
-}
-
-static void pnode_set(pnode_t* self, double probspace, long long successes, int attempts) {
-  self->probspace = probspace;
-  self->successes = successes;
-  self->attempts  = attempts;
-  return;
-}
-
+// TODO: do this
 static void ptree_free(ptree_t* ptree) {
   free(ptree->current_ply);
   free(ptree->next_ply);
@@ -274,9 +176,11 @@ static void ptree_free(ptree_t* ptree) {
 
 static VALUE ptree_success_prob(VALUE self) {
   ptree_t* ptree;
+  long long goal_location;
+
   Data_Get_Struct(self, ptree_t, ptree);
 
-  long long goal_location = ptree_ply_location_for_successes(ptree, ptree->goal);
+  goal_location = ptree_ply_location_for_successes(ptree, ptree->goal);
   if ((ptree->current_ply)[goal_location] == 0) {
     return rb_float_new(0.0f);
   } else {
@@ -335,21 +239,22 @@ static void ptree_gen_children(ptree_t* ptree, pnode_t* node, long prob_dist_num
 
 static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, long long successes, double probspace, int attempts) {
   long long destination_index = ptree_ply_location_for_successes(ptree, successes);
-  pnode_t* new_pnode;
   pnode_t* destination_node = destination_ply[destination_index];
 
   // Either the node is nonexistant (we used calloc() so it's 0) or it is stale or it exists.
   // We create a new node, overwrite the old node, or merge with a duplicate respectively.
   if(destination_node == 0) {
-    DEBUG("NEW       %5lld (%2.10f%%)\n", successes, probspace*100);
+    pnode_t* new_pnode;
     new_pnode = pnode_create(probspace, successes, attempts);
+    DEBUG("NEW       %5lld (%2.10f%%)\n", successes, probspace*100);
     destination_ply[destination_index] = new_pnode;
   } else if(destination_node->attempts < attempts) {
     DEBUG("OVERWRITE %5lld (%2.10f%%)\n", successes, probspace*100);
     pnode_set(destination_ply[destination_index], probspace, successes, attempts);
   } else {
+    double new_prob;
     // this is the ONLY PLACE we add probabilities.
-    double new_prob = destination_node->probspace + probspace;
+    new_prob = destination_node->probspace + probspace;
     DEBUG("MERGE     %5lld (%2.10f%% -> %2.10f%%)\n", successes, destination_node->probspace * 100, new_prob * 100);
     pnode_set(destination_ply[destination_index], new_prob, successes, attempts);
   }
@@ -357,20 +262,26 @@ static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, 
 
 static VALUE ptree_next_ply(VALUE self) {
   long current_prob_dist;
+  long ply_idx;
   pnode_t* current_node;
   ptree_t* ptree;
+
   Data_Get_Struct(self, ptree_t, ptree);
   current_prob_dist = ptree_next_prob_dist(ptree);
 
   DEBUG("===============================================\n");
   print_prob_dist(ptree, current_prob_dist);
-  for(int i=0; i < ptree->cardinality; i++) {
-    current_node = ptree->current_ply[i];
-    if((current_node !=  0) && (current_node->attempts) >= ptree->depth) {
+
+  // For every slot in the ply...
+  for(ply_idx = 0; ply_idx < ptree->cardinality; ply_idx++) {
+    current_node = ptree->current_ply[ply_idx];
+    if(current_node != 0 && (current_node->attempts) >= ptree->depth) {
+      // generate its children in the new ply if that slot holds a valid node.
       ptree_gen_children(ptree, current_node, current_prob_dist, ptree->next_ply);
     }
   }
-  rb_iv_set(self, "@depth", FIX2INT(rb_iv_get(self, "@depth")) + 1);
+
+  (ptree->depth)++;
   ptree_swap_plies(ptree);
   return Qnil;
 }
@@ -382,6 +293,7 @@ static long ptree_next_prob_dist(ptree_t* ptree) {
   return (ptree->current_prob_dist)++;
 }
 
+// Run all the prob dists given.
 static VALUE ptree_run_once(VALUE self) {
   ptree_t* ptree;
   Data_Get_Struct(self, ptree_t, ptree);
@@ -394,17 +306,15 @@ static VALUE ptree_run_once(VALUE self) {
 
 void Init_native() {
   VALUE cPTree = rb_define_class("ProbTree", rb_cObject);
-  //                         Class  rb-name   C-func #-args
   rb_define_alloc_func(cPTree, ptree_alloc);
+  //               Class     rb-name      C-func   #-args
   rb_define_method(cPTree, "initialize", ptree_init, 2);
   rb_define_method(cPTree, "goal", ptree_goal, 0);
   rb_define_method(cPTree, "cardinality", ptree_cardinality, 0);
-  rb_define_method(cPTree, "current_ply", ptree_current_ply, 0);
   rb_define_method(cPTree, "success_prob", ptree_success_prob, 0);
   rb_define_method(cPTree, "next_ply", ptree_next_ply, 0);
   rb_define_method(cPTree, "run_once", ptree_run_once, 0);
   //                                    r  w
   rb_define_attr(cPTree, "prob_dists", 1, 0);
-  rb_define_attr(cPTree, "type_lookup", 1, 0);
-  rb_define_attr(cPTree, "type_len_lookup", 1, 0);
+  rb_define_attr(cPTree, "goals", 1, 0);
 }
