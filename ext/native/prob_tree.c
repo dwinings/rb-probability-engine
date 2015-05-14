@@ -45,41 +45,43 @@ void rename_keys(VALUE goal_hash, VALUE mapper_hash) {
 }
 
 static void ptree_init_prob_dists(VALUE self, VALUE prob_dists, VALUE goal_hash) {
-  //                          target       method        argc argv   &block                             block_context
-  VALUE keys = rb_block_call(prob_dists, rb_intern("map"), 0, NULL, RUBY_METHOD_FUNC(prob_dist_keys_block), self);
-  keys = rb_funcall(keys, rb_intern("flatten"), 0);
-  keys = rb_funcall(keys, rb_intern("uniq"), 0);
-  PUTS_DEBUG(rb_funcall(keys, rb_intern("inspect"), 0));
-  ptree_t* ptree = NULL;
+  long item_idx, prob_dist_idx, num_items_desired, goal_idx, prob_dist_len;
+  VALUE item_symbol_mapping, item_set, rb_num_items_desired, prob_dist, rb_outcome_hash;
+  VALUE* prob_dists_ary;
+  ptree_t* ptree;
+  outcome_t* outcome;
 
   Data_Get_Struct(self, ptree_t, ptree);
 
-  long keys_len;
-  VALUE key_to_index_hash = rb_hash_new();
-  VALUE* keys_rb_ary;
+  // Initialize item mapping
 
-  keys_len = RARRAY_LEN(keys);
-  ptree->num_items = keys_len;
-  ptree->item_nums = (int*)calloc(ptree->num_items, sizeof(int));
-  keys_rb_ary = RARRAY_PTR(keys);
+  //                          target       method        argc argv   &block                             block_context
+  item_set = rb_block_call(prob_dists, rb_intern("map"), 0, NULL, RUBY_METHOD_FUNC(prob_dist_keys_block), self);
+  item_set = rb_funcall(item_set, rb_intern("flatten"), 0);
+  item_set = rb_funcall(item_set, rb_intern("uniq"), 0);
+  ptree->num_items = RARRAY_LEN(item_set);
 
-  for (int i = 0; i < keys_len; i++) {
-    rb_hash_aset(key_to_index_hash, keys_rb_ary[i], INT2FIX(i));
+  item_symbol_mapping = rb_hash_new();
+
+  for (item_idx = 0; item_idx < ptree->num_items; item_idx++) {
+    rb_hash_aset(item_symbol_mapping, (RARRAY_PTR(item_set))[item_idx], INT2FIX(item_idx));
   }
 
-  rename_keys(goal_hash, key_to_index_hash);
+  // Initialize the goal
 
-  for (int i = 0, goal_idx = 0; i < ptree->num_items; i++) {
-    VALUE rb_num_items_desired = rb_hash_aref(goal_hash, INT2FIX(i));
-    int num_items_desired;
+  ptree->goals_by_item = (long*)calloc(ptree->num_items, sizeof(long));
+  rename_keys(goal_hash, item_symbol_mapping);
+
+  for (item_idx = 0, goal_idx = 0; item_idx < ptree->num_items; item_idx++) {
+    rb_num_items_desired = rb_hash_aref(goal_hash, INT2FIX(item_idx));
     if (rb_num_items_desired == Qnil) {
       num_items_desired = 0;
     } else {
       num_items_desired = FIX2INT(rb_num_items_desired);
     }
 
-    DEBUG("Desiring %d of item %d\n", num_items_desired, i);
-    ptree->item_nums[i] = num_items_desired;
+    DEBUG("Desiring %d of item %d\n", num_items_desired, item_idx);
+    ptree->goals_by_item[item_idx] = num_items_desired;
     if (num_items_desired != 0) {
       ptree->goal += num_items_desired << (goal_idx*8);
       goal_idx++;
@@ -88,44 +90,54 @@ static void ptree_init_prob_dists(VALUE self, VALUE prob_dists, VALUE goal_hash)
 
   DEBUG("PTree Goal initialized to %lld\n", ptree->goal);
 
-  long prob_dist_len = RARRAY_LEN(prob_dists);
+  // Initialize the Probability Distribution
+
+  prob_dist_len = RARRAY_LEN(prob_dists);
   ptree->num_prob_dists = prob_dist_len;
   DEBUG("ptree->num_prob_dists: %ld\n", ptree->num_prob_dists);
-  ptree->prob_dists = (outcome_t*)calloc(keys_len*prob_dist_len, sizeof(outcome_t));
-  VALUE* prob_dists_ary = RARRAY_PTR(prob_dists);
-  PUTS_DEBUG(key_to_index_hash);
+  ptree->prob_dists = (outcome_t*)calloc((ptree->num_items)*prob_dist_len, sizeof(outcome_t));
+  prob_dists_ary = RARRAY_PTR(prob_dists);
+  PUTS_DEBUG(item_symbol_mapping);
 
-  for (long i = 0; i < prob_dist_len; i++) {
-    VALUE prob_dist = prob_dists_ary[i];
-    rename_keys(prob_dist, key_to_index_hash);
+  // for every probability distribution...
+  for (prob_dist_idx = 0; prob_dist_idx < prob_dist_len; prob_dist_idx++) {
+    prob_dist = prob_dists_ary[prob_dist_idx];
+    rename_keys(prob_dist, item_symbol_mapping);
     PUTS_DEBUG(prob_dist);
-    for (long j = 0; j < ptree->num_items; j++) {
-      outcome_t* outcome = &(ptree->prob_dists)[(i*ptree->num_items)+j];
-      VALUE rb_outcome_hash = rb_hash_aref(prob_dist, INT2FIX(j));
-      if (rb_outcome_hash != Qnil) {
-        VALUE tmp;
-        outcome->item        = j;
-        tmp                  = rb_hash_aref(rb_outcome_hash, SYM("reward"));
-        if (tmp == Qnil) {
-          outcome->quantity = 0;
-        } else {
-          outcome->quantity    = FIX2LONG(tmp);
-        }
-        tmp                  = rb_hash_aref(rb_outcome_hash, SYM("prob"));
-        if (tmp == Qnil) {
-          outcome->probability = 0.0f;
-        } else {
-          outcome->probability = NUM2DBL(tmp);
-        }
-        outcome->initialized = 1;
-      } else {
-        outcome->initialized = 0;
-      }
+
+    // and for every outcome within that distribution...
+    for (item_idx = 0; item_idx < ptree->num_items; item_idx++) {
+      outcome = &(ptree->prob_dists)[(prob_dist_idx * ptree->num_items) + item_idx];
+      rb_outcome_hash = rb_hash_aref(prob_dist, INT2FIX(item_idx));
+      initialize_outcome(outcome, item_idx, rb_outcome_hash);
     }
   }
   DEBUG("ptree->num_items: %lld\n", ptree->num_items);
   print_all_outcomes(ptree);
   DEBUG("INITALIZATION COMPLETE\n");
+}
+
+void initialize_outcome(outcome_t* outcome, long item, VALUE rb_outcome_hash) {
+  VALUE tmp;
+
+  if (rb_outcome_hash != Qnil) {
+    outcome->item          = item;
+    tmp                    = rb_hash_aref(rb_outcome_hash, SYM("reward"));
+    if (tmp == Qnil) {
+      outcome->quantity    = 0;
+    } else {
+      outcome->quantity    = FIX2LONG(tmp);
+    }
+    tmp                    = rb_hash_aref(rb_outcome_hash, SYM("prob"));
+    if (tmp == Qnil) {
+      outcome->probability = 0.0f;
+    } else {
+      outcome->probability = NUM2DBL(tmp);
+    }
+    outcome->initialized   = 1;
+  } else {
+    outcome->initialized   = 0;
+  }
 }
 
 void print_all_outcomes(ptree_t* ptree) {
@@ -183,10 +195,10 @@ static long long ptree_ply_location_for_successes(ptree_t* ptree, long long succ
   long long node_location = 0, goal_multiplier = 1;
 
   for(int i = 0, goal_idx = 0; i < ptree->num_items; i++) {
-    if (ptree->item_nums[i] > 0) {
+    if (ptree->goals_by_item[i] > 0) {
       long long current_success = (successes >> (goal_idx*8)) & 0xFF;
       node_location += current_success * goal_multiplier;
-      goal_multiplier *= ptree->item_nums[i] + 1;
+      goal_multiplier *= ptree->goals_by_item[i] + 1;
       goal_idx++;
     }
   }
@@ -276,29 +288,46 @@ static void ptree_gen_children(ptree_t* ptree, pnode_t* node, long prob_dist_num
   outcome_t* outcome;
   double reward_prob, new_probspace;
   long long new_successes, goal_of_type, successes_of_type, reward_of_type;
-  int i, goal_idx;
+  int item_idx, goal_idx;
 
   DEBUG("----- <%5lld, %2.5f%%> -----\n", node->successes, node->probspace);
 
-  for (i = 0, goal_idx = 0; i < ptree->num_items; i++) {
-    outcome = get_outcome(ptree, prob_dist_num, i);
+  // for every item that we know about...
+  for (item_idx = 0, goal_idx = 0; item_idx < ptree->num_items; item_idx++) {
+
+    // look at the potential outcome for that item in this probability distribution
+    outcome = get_outcome(ptree, prob_dist_num, item_idx);
+
+    // We only generate a node in the ply if the outcome for this item exists
     if (outcome->initialized) {
       reward_of_type = outcome->quantity;
       reward_prob = outcome->probability;
       new_successes = node->successes;
-      if ( ptree->item_nums[i] > 0 &&
-          (goal_of_type = (ptree->goal >> (goal_idx*8)) & 0xFF ) >
-          (successes_of_type = ((node->successes >> (goal_idx*8)) & 0xFF))) {
-        if (successes_of_type + reward_of_type > goal_of_type) {
-          reward_of_type = goal_of_type - successes_of_type;
+
+      // if this outcome is relevant to the goal...
+      if (ptree->goals_by_item[item_idx] > 0) {
+        goal_of_type = (ptree->goal >> (goal_idx*8)) & 0xFF;
+        successes_of_type = ((node->successes >> (goal_idx*8)) & 0xFF);
+
+        // ...and we have not reached our target for this item...
+        if (goal_of_type > successes_of_type) {
+          // (make sure we do not exceed our target for this item)
+          if (successes_of_type + reward_of_type > goal_of_type) {
+            reward_of_type = goal_of_type - successes_of_type;
+          }
+          // Make a new node with the update success state!
+          new_successes = node->successes + (reward_of_type << (goal_idx*8));
+          new_successes = ptree->goal < new_successes ? ptree->goal : new_successes;
         }
-        new_successes = node->successes + (reward_of_type << (goal_idx*8));
-        new_successes = ptree->goal < new_successes ? ptree->goal : new_successes;
       }
+
+      // Even if we didn't update the success state, we should still write the node into the next ply
       new_probspace = node->probspace * reward_prob;
       write_to_destination_ply(ptree, destination_ply, new_successes, new_probspace, node->attempts+1);
     }
-    if(ptree->item_nums[i] > 0) {
+
+    // We need to move to the correct goal index even if we have no outcome in this dist.
+    if(ptree->goals_by_item[item_idx] > 0) {
       goal_idx++;
     }
   }
@@ -309,6 +338,8 @@ static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, 
   pnode_t* new_pnode;
   pnode_t* destination_node = destination_ply[destination_index];
 
+  // Either the node is nonexistant (we used calloc() so it's 0) or it is stale or it exists.
+  // We create a new node, overwrite the old node, or merge with a duplicate respectively.
   if(destination_node == 0) {
     DEBUG("NEW       %5lld (%2.10f%%)\n", successes, probspace*100);
     new_pnode = pnode_create(probspace, successes, attempts);
@@ -316,7 +347,8 @@ static void write_to_destination_ply(ptree_t* ptree, pnode_t** destination_ply, 
   } else if(destination_node->attempts < attempts) {
     DEBUG("OVERWRITE %5lld (%2.10f%%)\n", successes, probspace*100);
     pnode_set(destination_ply[destination_index], probspace, successes, attempts);
-  } else { // We are merging the probabilities of these two nodes;
+  } else {
+    // this is the ONLY PLACE we add probabilities.
     double new_prob = destination_node->probspace + probspace;
     DEBUG("MERGE     %5lld (%2.10f%% -> %2.10f%%)\n", successes, destination_node->probspace * 100, new_prob * 100);
     pnode_set(destination_ply[destination_index], new_prob, successes, attempts);
@@ -339,7 +371,6 @@ static VALUE ptree_next_ply(VALUE self) {
     }
   }
   rb_iv_set(self, "@depth", FIX2INT(rb_iv_get(self, "@depth")) + 1);
-  //Do dragons.
   ptree_swap_plies(ptree);
   return Qnil;
 }
@@ -348,7 +379,6 @@ static long ptree_next_prob_dist(ptree_t* ptree) {
   if (ptree->current_prob_dist == ptree->num_prob_dists) {
     ptree->current_prob_dist = 0;
   }
-
   return (ptree->current_prob_dist)++;
 }
 

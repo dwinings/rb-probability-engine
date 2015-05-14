@@ -34,12 +34,12 @@ typedef struct prob_tree {
   outcome_t* prob_dists; // [[["a", 0.39], ["b", 0.40"] ...] ... ]
   pnode_t** current_ply;
   pnode_t** next_ply;
-  int* item_nums;
-  int* prob_dist_lens;
+  long* goals_by_item;
+  long* prob_dist_lens;
   long long goal;
   long long cardinality;
   long current_prob_dist;
-  int depth;
+  long depth;
   long num_prob_dists;
   long num_items;
 } ptree_t;
@@ -72,4 +72,5 @@ static void print_outcome(outcome_t* outcome);
 static outcome_t* get_outcome(ptree_t* ptree, long prob_dist_num, long outcome_num);
 static void print_all_outcomes(ptree_t* ptree);
 static void print_prob_dist(ptree_t* ptree, long prob_dist_num);
+static void initialize_outcome(outcome_t* outcome, long item, VALUE rb_outcome_hash);
 #endif
