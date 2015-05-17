@@ -72,6 +72,12 @@ static void pnode_set(pnode_t* self, double probspace, long long successes, int 
   return;
 }
 
+static void pnode_free(pnode_t* self) {
+  if (self != 0) {
+    free(self);
+  }
+}
+
 // RUBY ACCESSORS (need more of them)
 
 static VALUE ptree_cardinality(VALUE self) {

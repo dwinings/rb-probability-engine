@@ -4,14 +4,6 @@ require 'rspec'
 TERMINATION_PROB = 0.9
 TOLERANCE = 0.0001 # +/- 0.1%
 
-def run_to_completion(prob_tree)
-  iterations = 0
-  while (p.success_prob < TERMINATION_PROB) do
-    p.run_once
-    iterations += 1
-  end
-end
-
 describe ProbTree do
   context "sparse prob dists" do
     before(:each) do
@@ -72,6 +64,7 @@ describe ProbTree do
         p.run_once
         iterations += 1
       end
+
       expect(p.success_prob).to be_within(TOLERANCE).of(0.9002998551225079)
       expect(iterations).to be(531)
     end
@@ -164,41 +157,41 @@ describe ProbTree do
       expect(p.success_prob).to be_within(TOLERANCE).of(0.9262993113605856)
     end
 
-    # it 'should handle a fully specified goal with multiples' do
-    #   p = ProbTree.new(@prob_dists, {a: 5, b: 4})
+    it 'should handle a fully specified goal with multiples' do
+      p = ProbTree.new(@prob_dists, {a: 5, b: 4, c: 2})
 
-    #   iterations = 0
-    #   while (p.success_prob < TERMINATION_PROB) do
-    #     p.run_once
-    #     iterations += 1
-    #   end
-    #   expect(p.success_prob).to be_within(TOLERANCE).of(0.905533251946875)
-    #   expect(iterations).to be(15)
-    # end
+      iterations = 0
+      while (p.success_prob < TERMINATION_PROB) do
+        p.run_once
+        iterations += 1
+      end
+      expect(p.success_prob).to be_within(TOLERANCE).of(0.9225831159948961)
+      expect(iterations).to be(8)
+    end
 
-    # it 'should handle a sparse goal with no multiples' do
-    #   p = ProbTree.new(@prob_dists, {a: 5, b: 4})
+    it 'should handle a sparse goal with no multiples' do
+      p = ProbTree.new(@prob_dists, {a: 1, b: 1})
 
-    #   iterations = 0
-    #   while (p.success_prob < TERMINATION_PROB) do
-    #     p.run_once
-    #     iterations += 1
-    #   end
-    #   expect(p.success_prob).to be_within(TOLERANCE).of(0.905533251946875)
-    #   expect(iterations).to be(15)
+      iterations = 0
+      while (p.success_prob < TERMINATION_PROB) do
+        p.run_once
+        iterations += 1
+      end
+      expect(p.success_prob).to be_within(TOLERANCE).of(0.9170637500000001)
+      expect(iterations).to be(5)
 
-    # end
+    end
 
-    # it 'should handle a sparse goal with multiples' do
-    #   p = ProbTree.new(@prob_dists, {a: 5, b: 4})
+    it 'should handle a sparse goal with multiples' do
+      p = ProbTree.new(@prob_dists, {a: 5, b: 4})
 
-    #   iterations = 0
-    #   while (p.success_prob < TERMINATION_PROB) do
-    #     p.run_once
-    #     iterations += 1
-    #   end
-    #   expect(p.success_prob).to be_within(TOLERANCE).of(0.905533251946875)
-    #   expect(iterations).to be(15)
-    # end
+      iterations = 0
+      while (p.success_prob < TERMINATION_PROB) do
+        p.run_once
+        iterations += 1
+      end
+      expect(p.success_prob).to be_within(TOLERANCE).of(0.9310035000000003)
+      expect(iterations).to be(6)
+    end
   end
 end

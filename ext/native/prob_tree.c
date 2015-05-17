@@ -166,8 +166,16 @@ static pnode_t** pnode_ply_create(long long cardinality) {
   return ply;
 }
 
-// TODO: do this
 static void ptree_free(ptree_t* ptree) {
+  int idx;
+  free(ptree->prob_dists);
+  free(ptree->goals_by_item);
+
+  for (idx = 0; idx < ptree->cardinality; idx++) {
+    // Note that pnode_free handles the null check.
+    pnode_free((ptree->current_ply)[idx]);
+    pnode_free((ptree->next_ply)[idx]);
+  }
   free(ptree->current_ply);
   free(ptree->next_ply);
   free(ptree);

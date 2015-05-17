@@ -62,6 +62,7 @@ static void ptree_init_cardinality(VALUE self, VALUE goal_hash);
 static void ptree_init_plies(VALUE self);
 static void ptree_swap_plies(ptree_t* ptree);
 static pnode_t* pnode_create(double probspace, long long successes, int attempts);
+static void pnode_free(pnode_t* self);
 static pnode_t** pnode_ply_create(long long cardinality);
 static void pnode_set(pnode_t* self, double probspace, long long successes, int attempts);
 static long long ptree_ply_location_for_successes(ptree_t* ptree, long long successes);
