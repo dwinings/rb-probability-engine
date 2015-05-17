@@ -2,7 +2,9 @@
 #include "prob_tree_helpers.c"
 
 static VALUE ptree_alloc(VALUE klass) {
-  ptree_t* ptree = (ptree_t*)malloc(sizeof(ptree_t));
+  ptree_t* ptree;
+
+  ptree = (ptree_t*)malloc(sizeof(ptree_t));
   ptree->goal = 0L;
   ptree->current_prob_dist = 0;
   ptree->depth = 0;
@@ -168,6 +170,7 @@ static pnode_t** pnode_ply_create(long long cardinality) {
 
 static void ptree_free(ptree_t* ptree) {
   int idx;
+
   free(ptree->prob_dists);
   free(ptree->goals_by_item);
 
@@ -176,6 +179,7 @@ static void ptree_free(ptree_t* ptree) {
     pnode_free((ptree->current_ply)[idx]);
     pnode_free((ptree->next_ply)[idx]);
   }
+
   free(ptree->current_ply);
   free(ptree->next_ply);
   free(ptree);
@@ -304,16 +308,20 @@ static long ptree_next_prob_dist(ptree_t* ptree) {
 // Run all the prob dists given.
 static VALUE ptree_run_once(VALUE self) {
   ptree_t* ptree;
+  int idx;
+
   Data_Get_Struct(self, ptree_t, ptree);
   DEBUG("!!!!!!!!!!!!!!!!! RUNNING ONCE\n");
-  for(int i = 0; i < ptree->num_prob_dists; i++) {
+  for(idx = 0; idx < ptree->num_prob_dists; idx++) {
     ptree_next_ply(self);
   }
   return Qnil;
 }
 
 void Init_native() {
-  VALUE cPTree = rb_define_class("ProbTree", rb_cObject);
+  VALUE cPTree;
+
+  cPTree = rb_define_class("ProbTree", rb_cObject);
   rb_define_alloc_func(cPTree, ptree_alloc);
   //               Class     rb-name      C-func   #-args
   rb_define_method(cPTree, "initialize", ptree_init, 2);

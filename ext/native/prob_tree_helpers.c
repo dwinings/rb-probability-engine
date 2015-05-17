@@ -6,9 +6,13 @@
 // b) are accessor glue functions to expose internal C state to rubyland.
 
 static VALUE hash_key_renamer_block(VALUE key, VALUE context_ary, int argc, VALUE argv[]) {
-  VALUE* context_c_ary = RARRAY_PTR(context_ary);
-  VALUE goal_hash = context_c_ary[0];
-  VALUE mapper_hash = context_c_ary[1];
+  VALUE* context_c_ary;
+  VALUE goal_hash, mapper_hash;
+
+  context_c_ary = RARRAY_PTR(context_ary);
+  goal_hash = context_c_ary[0];
+  mapper_hash = context_c_ary[1];
+
   // goal[mapper[key]] = goal.delete(key) if mapper[key]
   if (rb_hash_aref(mapper_hash, key) != Qnil) {
     rb_hash_aset(goal_hash, rb_hash_aref(mapper_hash, key), rb_funcall(goal_hash, rb_intern("delete"), 1, key));
@@ -32,17 +36,21 @@ static VALUE prob_dist_keys_block(VALUE yielded_dist, VALUE context, int argc, V
 }
 
 void print_all_outcomes(ptree_t* ptree) {
-  for (long i = 0; i < ptree->num_prob_dists; i++) {
+  long i, j;
+
+  for (i = 0; i < ptree->num_prob_dists; i++) {
     DEBUG("New prob dist.\n");
-    for (long j = 0; j < ptree->num_items; j++) {
+    for (j = 0; j < ptree->num_items; j++) {
       print_outcome(get_outcome(ptree, i, j));
     }
   }
 }
 
 static void print_prob_dist(ptree_t* ptree, long current_prob_dist) {
+  int i;
+
   DEBUG("PROB_DIST: \n");
-  for (int i = 0; i < ptree->num_items; i++) {
+  for (i = 0; i < ptree->num_items; i++) {
     print_outcome(&((ptree->prob_dists)[(current_prob_dist * ptree->num_items) + i]));
   }
 }
@@ -58,7 +66,9 @@ static void print_outcome(outcome_t* outcome) {
 }
 
 static pnode_t* pnode_create(double probspace, long long successes, int attempts) {
-  pnode_t* pnode = (pnode_t*)malloc(sizeof(pnode_t));
+  pnode_t* pnode;
+
+  pnode = (pnode_t*)malloc(sizeof(pnode_t));
   pnode->probspace = probspace;
   pnode->successes = successes;
   pnode->attempts = attempts;
@@ -82,12 +92,14 @@ static void pnode_free(pnode_t* self) {
 
 static VALUE ptree_cardinality(VALUE self) {
   ptree_t* ptree;
+
   Data_Get_Struct(self, ptree_t, ptree);
   return LONG2FIX(ptree->cardinality);
 }
 
 static VALUE ptree_goal(VALUE self) {
   ptree_t* ptree;
+
   Data_Get_Struct(self, ptree_t, ptree);
   return INT2FIX(ptree->goal);
 }
