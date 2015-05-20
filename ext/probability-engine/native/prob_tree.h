@@ -3,7 +3,7 @@
 
 #include <ruby.h>
 
-#define MAX_CARDINALITY 100000
+#define MAX_CARDINALITY 1000000
 #define PUTS(OBJ) (rb_funcall(rb_cObject, rb_intern("puts"), 1, OBJ))
 #define SYM(STR) (ID2SYM(rb_intern(STR)))
 

@@ -176,8 +176,12 @@ static void ptree_free(ptree_t* ptree) {
 
   for (idx = 0; idx < ptree->cardinality; idx++) {
     // Note that pnode_free handles the null check.
-    pnode_free((ptree->current_ply)[idx]);
-    pnode_free((ptree->next_ply)[idx]);
+    if(ptree->current_ply != NULL) {
+      pnode_free((ptree->current_ply)[idx]);
+    }
+    if (ptree->next_ply != NULL) {
+      pnode_free((ptree->next_ply)[idx]);
+    }
   }
 
   free(ptree->current_ply);
@@ -319,9 +323,10 @@ static VALUE ptree_run_once(VALUE self) {
 }
 
 void Init_native() {
-  VALUE cPTree;
+  VALUE cPTree, mNativeModule;
 
-  cPTree = rb_define_class("ProbTree", rb_cObject);
+  mNativeModule = rb_define_module_under(rb_define_module("ProbabilityEngine"), "Native");
+  cPTree = rb_define_class_under(mNativeModule, "ProbTree", rb_cObject);
   rb_define_alloc_func(cPTree, ptree_alloc);
   //               Class     rb-name      C-func   #-args
   rb_define_method(cPTree, "initialize", ptree_init, 2);

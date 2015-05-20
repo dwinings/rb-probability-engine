@@ -1,10 +1,9 @@
-require_relative '../lib/probability-engine/native'
+require_relative '../lib/probability-engine/ruby'
 require 'rspec'
 
-describe ProbabilityEngine::Native::ProbTree do
+describe ProbabilityEngine::Ruby::ProbTree do
   TERMINATION_PROB = 0.9
   TOLERANCE        = 0.0001 # +/- 0.1%
-
   context "sparse prob dists" do
     before(:each) do
       @prob_dists = [
@@ -21,7 +20,7 @@ describe ProbabilityEngine::Native::ProbTree do
     ]
     end
     it 'should compute missing goal keys in distributions' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {b: 1, c: 1})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {b: 1, c: 1})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -33,7 +32,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle prob_dists with no goal elements' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {c: 1})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {c: 1})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -45,7 +44,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle goals containing all elements' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 1, b: 1, c: 1})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 1, b: 1, c: 1})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -57,7 +56,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle goals containing multiples of elements' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 10, b: 10, c: 3})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 10, b: 10, c: 3})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -70,7 +69,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle goals with missing elements and multiples' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 10, b: 10})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 10, b: 10})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -82,7 +81,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle goals with useless prob_dists and multiples' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {b: 30, c: 2})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {b: 30, c: 2})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -106,7 +105,7 @@ describe ProbabilityEngine::Native::ProbTree do
     ]
     end
     it 'should handle a single prob dist with a full goal' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 5, b: 4, c: 5})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 5, b: 4, c: 5})
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
         p.run_once
@@ -117,7 +116,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle useless elements.' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 5, b: 4})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 5, b: 4})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -146,7 +145,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle a fully specified goal with no multiples' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 1, b: 1, c: 1})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 1, b: 1, c: 1})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -158,7 +157,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle a fully specified goal with multiples' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 5, b: 4, c: 2})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 5, b: 4, c: 2})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -170,7 +169,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle a sparse goal with no multiples' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 1, b: 1})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 1, b: 1})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
@@ -183,7 +182,7 @@ describe ProbabilityEngine::Native::ProbTree do
     end
 
     it 'should handle a sparse goal with multiples' do
-      p = ProbabilityEngine::Native::ProbTree.new(@prob_dists, {a: 5, b: 4})
+      p = ProbabilityEngine::Ruby::ProbTree.new(@prob_dists, {a: 5, b: 4})
 
       iterations = 0
       while (p.success_prob < TERMINATION_PROB) do
