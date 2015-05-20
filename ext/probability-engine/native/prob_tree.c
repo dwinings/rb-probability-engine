@@ -94,8 +94,15 @@ static VALUE ptree_init(VALUE self, VALUE prob_dists, VALUE goal_hash) {
   print_all_outcomes(ptree);
 
   ptree->current_ply = pnode_ply_create(ptree->cardinality);
-  ptree->next_ply = pnode_ply_create(ptree->cardinality);
-  write_to_destination_ply(ptree, ptree->current_ply, 0, 1.0f, 0);
+  ptree->next_ply =    pnode_ply_create(ptree->cardinality);
+
+  if (ptree->current_ply != NULL && ptree->next_ply != NULL) {
+    write_to_destination_ply(ptree, ptree->current_ply, 0, 1.0f, 0);
+    rb_iv_set(self, "@invalid", Qfalse);
+  } else {
+    rb_iv_set(self, "@invalid", Qtrue);
+  }
+
   ptree->depth = 0;
   DEBUG("INITALIZATION COMPLETE\n");
 
@@ -160,8 +167,8 @@ static void ptree_swap_plies(ptree_t* ptree) {
 static pnode_t** pnode_ply_create(long long cardinality) {
   pnode_t** ply;
   if(cardinality > MAX_CARDINALITY) {
-    printf("Tree too large!\n");
-    return 0x0;
+    DEBUG("Tree too large! Throwing exception...");
+    ply = 0;
   } else {
     ply = (pnode_t**)calloc(cardinality, sizeof(pnode_t));
   }
@@ -335,6 +342,8 @@ void Init_native() {
   rb_define_method(cPTree, "success_prob", ptree_success_prob, 0);
   rb_define_method(cPTree, "next_ply", ptree_next_ply, 0);
   rb_define_method(cPTree, "run_once", ptree_run_once, 0);
+  rb_define_method(cPTree, "depth", ptree_depth, 0);
+  rb_define_method(cPTree, "invalid?", ptree_invalid, 0);
   //                                    r  w
   rb_define_attr(cPTree, "prob_dists", 1, 0);
   rb_define_attr(cPTree, "goals", 1, 0);

@@ -103,3 +103,14 @@ static VALUE ptree_goal(VALUE self) {
   Data_Get_Struct(self, ptree_t, ptree);
   return INT2FIX(ptree->goal);
 }
+
+static VALUE ptree_depth(VALUE self) {
+  ptree_t* ptree;
+
+  Data_Get_Struct(self, ptree_t, ptree);
+  return INT2FIX(ptree->depth);
+}
+
+static VALUE ptree_invalid(VALUE self) {
+  return rb_iv_get(self, "@invalid");
+}

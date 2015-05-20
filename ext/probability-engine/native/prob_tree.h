@@ -53,6 +53,7 @@ static VALUE ptree_success_prob(VALUE self);
 static VALUE ptree_run_once(VALUE self);
 static VALUE ptree_next_ply(VALUE self);
 static VALUE ptree_run_once(VALUE self);
+static VALUE ptree_depth(VALUE self);
 
 // Hidden C internal stuff
 
@@ -74,4 +75,5 @@ static outcome_t* get_outcome(ptree_t* ptree, long prob_dist_num, long outcome_n
 static void print_all_outcomes(ptree_t* ptree);
 static void print_prob_dist(ptree_t* ptree, long prob_dist_num);
 static void initialize_outcome(outcome_t* outcome, long item, VALUE rb_outcome_hash);
+static VALUE ptree_invalid(VALUE self);
 #endif
